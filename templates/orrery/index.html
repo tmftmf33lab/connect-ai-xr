@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orrery · CONNECT AI XR</title>
+<link rel="icon" href="data:,">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#07060a}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/", "connect-xr": "./vendor/connect-xr.js" } }
+</script>
+</head>
+<body>
+<script type="module">
+// Orrery: a brass planet machine on a round wooden table in a dim study.
+// Point at a planet and pinch (or click it) to hear its note. The glass panel plays, pauses and changes speed.
+// In AR (Quest 3/3S) the study disappears and the table with the orrery stands in your real room.
+// Everything is drawn in code: no image, model or sound files.
+import { createXRApp, THREE, glassPanel, woodTexture, label, chime, mulberry } from 'connect-xr';
+
+const CONFIG = {
+  title: 'Orrery',
+  center: [0, 1.0, -0.8],          // middle of the machine; a person standing at 0,0,0 sees it on the table in front
+  speed: 1,                         // 1 = one Earth year in about 20 seconds
+  planets: [
+    // name, orbit radius (m), size (m), colour, days per year, note (Hz)
+    { name: 'Mercury', r: 0.13, size: 0.012, color: 0x9d9389, year: 88,    note: 1046.5 },
+    { name: 'Venus',   r: 0.19, size: 0.019, color: 0xe2bd84, year: 225,   note: 880.0 },
+    { name: 'Earth',   r: 0.26, size: 0.021, color: 0x3d73b8, year: 365,   note: 783.99, moon: true },
+    { name: 'Mars',    r: 0.33, size: 0.016, color: 0xb9532f, year: 687,   note: 659.25 },
+    { name: 'Jupiter', r: 0.42, size: 0.040, color: 0xc9a07a, year: 4333,  note: 523.25, bands: true },
+    { name: 'Saturn',  r: 0.51, size: 0.033, color: 0xdcc38c, year: 10759, note: 392.0, ring: true },
+  ],
+};
+
+const C = new THREE.Vector3(...CONFIG.center);
+const app = await createXRApp({ title: CONFIG.title, prefer: 'vr', cameraPos: [-0.26, 1.46, 0.24], target: [0.12, 0.96, -0.82], background: 0x07060a, environment: 0.25 });
+const { scene } = app;
+const rnd = mulberry(11);
+const vrOnly = [];
+
+// ---------- the study (hidden in AR) ----------
+const study = new THREE.Group(); scene.add(study); vrOnly.push(study);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 64), new THREE.MeshStandardMaterial({ map: woodTexture({ tone: [70, 44, 26], planks: 10, repeat: [4, 4] }), roughness: 0.5 }));
+floor.rotation.x = -Math.PI / 2; study.add(floor);
+// dark wall panels in a ring with thin gold lines
+const panelMat = new THREE.MeshStandardMaterial({ map: woodTexture({ tone: [44, 28, 18], planks: 6, repeat: [1, 2] }), roughness: 0.7 });
+const goldLine = new THREE.MeshStandardMaterial({ color: 0xd6892a, metalness: 1, roughness: 0.3 });
+for (let i = 0; i < 14; i++) {
+  const a = (i / 14) * Math.PI * 2;
+  const g = new THREE.Group(); g.position.set(Math.sin(a) * 4.2, 0, Math.cos(a) * 4.2 - 0.8); g.rotation.y = a + Math.PI;
+  const p = new THREE.Mesh(new THREE.BoxGeometry(1.86, 3.2, 0.06), panelMat); p.position.y = 1.6; g.add(p);
+  const l = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.02, 0.07), goldLine); l.position.y = 1.0; g.add(l);
+  study.add(g);
+}
+// a dome of faint stars above: one draw call
+const starGeo = new THREE.BufferGeometry(); const sp = [];
+for (let i = 0; i < 1400; i++) {
+  const u = rnd(), v = rnd() * 0.85 + 0.15, th = u * Math.PI * 2, ph = Math.acos(v);
+  sp.push(Math.sin(ph) * Math.cos(th) * 14, 3.2 + Math.cos(ph) * 10, Math.sin(ph) * Math.sin(th) * 14 - 0.8);
+}
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+study.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xf2dfc0, size: 0.03, sizeAttenuation: true, transparent: true, opacity: 0.7, toneMapped: false })));
+
+// ---------- the round table (stays in AR) ----------
+const brass = new THREE.MeshStandardMaterial({ color: 0xd6892a, metalness: 1, roughness: 0.26 });
+const brassDark = new THREE.MeshStandardMaterial({ color: 0x8a5a22, metalness: 1, roughness: 0.4 });
+const tableWood = new THREE.MeshStandardMaterial({ map: woodTexture({ tone: [86, 50, 28], planks: 7 }), roughness: 0.38 });
+const table = new THREE.Group(); table.position.set(C.x, 0, C.z); scene.add(table);
+const top = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.05, 64), tableWood); top.position.y = 0.745; table.add(top);
+const edge = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.008, 8, 96), brass); edge.rotation.x = Math.PI / 2; edge.position.y = 0.77; table.add(edge);
+const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.72, 24), tableWood); leg.position.y = 0.36; table.add(leg);
+const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.04, 48), tableWood); foot.position.y = 0.02; table.add(foot);
+
+// ---------- the machine ----------
+const orrery = new THREE.Group(); orrery.position.copy(C); scene.add(orrery);
+const baseY = 0.77 - C.y;                       // table top, in orrery space
+const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.04, 48), brassDark); plinth.position.y = baseY + 0.02; orrery.add(plinth);
+const column = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, -baseY, 16), brass); column.position.y = baseY / 2; orrery.add(column);
+// the ring of the zodiac: a flat brass band with tick marks (instanced ticks = one call)
+const band = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.004, 6, 128), brass); band.rotation.x = Math.PI / 2; band.position.y = baseY + 0.06; orrery.add(band);
+const ticks = new THREE.InstancedMesh(new THREE.BoxGeometry(0.003, 0.02, 0.012), brass, 72);
+const m4 = new THREE.Matrix4();
+for (let i = 0; i < 72; i++) {
+  const a = (i / 72) * Math.PI * 2;
+  m4.makeRotationY(-a).setPosition(Math.cos(a) * 0.58, baseY + 0.06 + (i % 6 ? 0 : 0.008), Math.sin(a) * 0.58);
+  ticks.setMatrixAt(i, m4);
+}
+orrery.add(ticks);
+const UP = new THREE.Vector3(0, 1, 0);
+for (const a of [0.5, 0.5 + Math.PI * 2 / 3, 0.5 + Math.PI * 4 / 3]) { // three spokes from the plinth out to the band
+  const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+  const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.43, 6), brassDark);
+  s.quaternion.setFromUnitVectors(UP, dir); s.position.copy(dir).multiplyScalar(0.365); s.position.y = baseY + 0.045; orrery.add(s);
+}
+
+// the sun: a bright core that is not tone mapped, a soft glow sprite and a real light
+const sun = new THREE.Mesh(new THREE.SphereGeometry(0.055, 48, 32), new THREE.MeshBasicMaterial({ color: 0xffc070, toneMapped: false }));
+orrery.add(sun);
+const glowC = document.createElement('canvas'); glowC.width = glowC.height = 256;
+const gg = glowC.getContext('2d'), gr = gg.createRadialGradient(128, 128, 0, 128, 128, 128);
+gr.addColorStop(0, 'rgba(255,214,140,1)'); gr.addColorStop(0.18, 'rgba(255,170,70,0.55)'); gr.addColorStop(0.5, 'rgba(214,110,30,0.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+gg.fillStyle = gr; gg.fillRect(0, 0, 256, 256);
+const glowTex = new THREE.CanvasTexture(glowC); glowTex.colorSpace = THREE.SRGBColorSpace;
+const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+glow.scale.setScalar(0.42); orrery.add(glow);
+const sunLight = new THREE.PointLight(0xffb060, 1.0, 2.4, 1.6); orrery.add(sunLight);
+
+// planets: each one sits on a thin arm that turns around the column
+function bandsTexture(base) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64; const g = c.getContext('2d');
+  const col = new THREE.Color(base);
+  for (let y = 0; y < 64; y += 2) {
+    const k = 0.75 + 0.35 * Math.sin(y * 0.55) * Math.sin(y * 0.13 + 1) + rnd() * 0.08;
+    g.fillStyle = `rgb(${Math.min(255, col.r * 255 * k) | 0},${Math.min(255, col.g * 255 * k) | 0},${Math.min(255, col.b * 255 * k * 0.92) | 0})`;
+    g.fillRect(0, y, 128, 2);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const orbitMat = new THREE.MeshBasicMaterial({ color: 0xd6892a, transparent: true, opacity: 0.28, toneMapped: false });
+const planets = [];
+CONFIG.planets.forEach((p, i) => {
+  const h = -0.02 - i * 0.012;                    // each arm a little lower, like a real orrery
+  const pivot = new THREE.Group(); pivot.position.y = h; pivot.rotation.y = [0.7, 2.3, 1.25, 2.85, 0.15, 2.0][i] ?? rnd() * 6.28; orrery.add(pivot); // start angles: every planet visible from the front
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.0025, p.r, 6), brass);
+  arm.rotation.z = Math.PI / 2; arm.position.x = p.r / 2; pivot.add(arm);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.05, 6), brass); post.position.set(p.r, 0.025, 0); pivot.add(post);
+  const body = new THREE.Group(); body.position.set(p.r, 0.05 + p.size, 0); pivot.add(body);
+  const mat = new THREE.MeshStandardMaterial({ color: p.bands ? 0xffffff : p.color, map: p.bands ? bandsTexture(p.color) : null, roughness: 0.55, metalness: 0.05, emissive: p.color, emissiveIntensity: 0.06 });
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(p.size, 32, 20), mat); body.add(ball);
+  if (p.ring) {
+    const rg = new THREE.Mesh(new THREE.RingGeometry(p.size * 1.4, p.size * 2.0, 48), new THREE.MeshStandardMaterial({ color: 0xcdb07a, side: THREE.DoubleSide, transparent: true, opacity: 0.55, roughness: 0.6 }));
+    rg.rotation.x = Math.PI / 2 - 0.45; body.add(rg);
+  }
+  let moon = null;
+  if (p.moon) {
+    moon = new THREE.Group(); body.add(moon);
+    const mm = new THREE.Mesh(new THREE.SphereGeometry(0.007, 16, 12), new THREE.MeshStandardMaterial({ color: 0xcfc8bd, roughness: 0.9 }));
+    mm.position.x = 0.045; moon.add(mm);
+    const mArm = new THREE.Mesh(new THREE.CylinderGeometry(0.0012, 0.0012, 0.045, 4), brass); mArm.rotation.z = Math.PI / 2; mArm.position.x = 0.0225; moon.add(mArm);
+  }
+  // a bigger invisible ball makes small planets easy to point at with a hand
+  const hit = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.035, p.size * 1.6), 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+  body.add(hit);
+  const orbit = new THREE.Mesh(new THREE.TorusGeometry(p.r, 0.0012, 4, 128), orbitMat); orbit.rotation.x = Math.PI / 2; orbit.position.y = h + 0.05 + p.size; orrery.add(orbit);
+  const item = { ...p, pivot, body, ball, mat, moon, angle: pivot.rotation.y };
+  planets.push(item);
+  app.interactive(body, () => select(item), (on) => { mat.emissiveIntensity = on ? 0.45 : (item === picked ? 0.3 : 0.06); });
+});
+
+// a gold ring that shows which planet you picked
+const pickRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.04, 8, 48), new THREE.MeshBasicMaterial({ color: 0xf2b45a, toneMapped: false }));
+pickRing.visible = false; scene.add(pickRing);
+
+// ---------- light ----------
+scene.add(new THREE.HemisphereLight(0xffe6c4, 0x120a06, 0.22));
+const key = new THREE.SpotLight(0xffd6a0, 6, 6, 0.5, 0.6, 1.4); key.position.set(0.4, 3.0, C.z + 0.6); key.target.position.copy(C); scene.add(key, key.target);
+const rim = new THREE.DirectionalLight(0x8fa8ff, 0.35); rim.position.set(-2, 2, -3); scene.add(rim);
+
+// ---------- glass panel ----------
+let playing = true, speed = CONFIG.speed, soundOn = false, picked = null, pad = null;
+const panel = glassPanel(app, {
+  width: 0.62, height: 0.36, px: 1024,
+  buttons: [
+    { id: 'play', label: 'PAUSE', x: 64, y: 440, w: 210, h: 84 },
+    { id: 'slower', label: 'SLOWER', x: 294, y: 440, w: 210, h: 84 },
+    { id: 'faster', label: 'FASTER', x: 524, y: 440, w: 210, h: 84 },
+    { id: 'sound', label: 'SOUND', x: 754, y: 440, w: 206, h: 84 },
+  ],
+  draw(ctx) {
+    ctx.fillStyle = '#D6892A'; ctx.fillRect(64, 70, 60, 3);
+    ctx.fillStyle = '#EBE2D2'; ctx.font = '400 26px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText('CONNECT AI LAB   ·   ORRERY', 64, 124);
+    ctx.font = '400 118px "Didot","Bodoni 72",Georgia,serif';
+    ctx.fillText(picked ? picked.name : 'The Sun', 64, 268);
+    ctx.fillStyle = 'rgba(235,226,210,0.62)'; ctx.font = '400 28px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText(picked ? `One year = ${picked.year.toLocaleString('en-US')} Earth days` : 'Point at a planet and pinch, or click it.', 64, 330);
+    ctx.fillText(`Speed  ×${speed.toFixed(speed < 1 ? 2 : 1)}${playing ? '' : '   ·   paused'}`, 64, 384);
+  },
+  onButton(id, b) {
+    if (id === 'play') { playing = !playing; b.label = playing ? 'PAUSE' : 'PLAY'; }
+    if (id === 'slower') speed = Math.max(0.25, speed / 2);
+    if (id === 'faster') speed = Math.min(16, speed * 2);
+    if (id === 'sound') { soundOn = !soundOn; b.active = soundOn; toggleSound(); }
+    chime(app.audio, { play: 698.46, slower: 587.33, faster: 880, sound: 523.25 }[id], { gain: 0.06, time: 0.9 });
+  },
+});
+panel.group.position.set(C.x + 0.78, 1.24, C.z - 0.12); scene.add(panel.group);
+
+function select(p) {
+  picked = p;
+  for (const q of planets) q.mat.emissiveIntensity = q === p ? 0.3 : 0.06;
+  pickRing.visible = true; pickRing.scale.setScalar(p.size * 1.9 * (p.ring ? 1.3 : 1));
+  chime(app.audio, p.note, { gain: 0.16, time: 2.6 });
+  panel.paint();
+}
+
+function toggleSound() {
+  const ctx = app.audio; if (!ctx) return;
+  if (soundOn && !pad) {
+    pad = ctx.createGain(); pad.gain.value = 0;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; pad.connect(lp).connect(ctx.destination);
+    for (const f of [65.41, 98.0, 130.81, 196.0, 293.66]) { // C, G, C, G, D: open and calm
+      const o = ctx.createOscillator(); o.type = f < 100 ? 'sine' : 'triangle'; o.frequency.value = f;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + rnd() * 0.06; const lg = ctx.createGain(); lg.gain.value = 3;
+      const og = ctx.createGain(); og.gain.value = f < 100 ? 0.5 : 0.18;
+      lfo.connect(lg).connect(o.detune); o.connect(og).connect(pad); o.start(); lfo.start();
+    }
+  }
+  if (pad) pad.gain.setTargetAtTime(soundOn ? 0.07 : 0, ctx.currentTime, 1.0);
+}
+
+// ---------- AR: hide the study, keep the table and machine ----------
+app.onModeChange((m) => { for (const o of vrOnly) o.visible = m !== 'ar'; });
+
+// ---------- motion ----------
+const eye = new THREE.Vector3(), wp = new THREE.Vector3();
+app.onFrame((dt, t) => {
+  const k = playing ? dt * speed : 0;
+  for (const p of planets) {
+    p.pivot.rotation.y += k * (2 * Math.PI / 20) * (365 / p.year);
+    p.body.rotation.y += k * 2.5;
+    if (p.moon) p.moon.rotation.y += k * 6;
+  }
+  sun.rotation.y += dt * 0.1;
+  glow.material.opacity = 0.9 + Math.sin(t * 2.1) * 0.06;
+  if (picked) { picked.body.getWorldPosition(wp); pickRing.position.copy(wp); (app.renderer.xr.isPresenting ? app.renderer.xr.getCamera() : app.camera).getWorldPosition(eye); pickRing.lookAt(eye); }
+  // the panel turns to face you
+  (app.renderer.xr.isPresenting ? app.renderer.xr.getCamera() : app.camera).getWorldPosition(eye);
+  const want = Math.atan2(eye.x - panel.group.position.x, eye.z - panel.group.position.z);
+  panel.group.rotation.y += (want - panel.group.rotation.y) * Math.min(1, dt * 3);
+});
+</script>
+</body>
+</html>

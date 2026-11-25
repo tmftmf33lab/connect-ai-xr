@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>Gallery · CONNECT AI XR</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0b0906}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/", "connect-xr": "./vendor/connect-xr.js" } }
+</script>
+</head>
+<body>
+<script type="module">
+// Gallery: a quiet hall you walk through, with your own photos on the walls.
+// Quest: Enter VR, point at the floor and pinch (or trigger) to step there. Point at a picture to read its caption.
+// Computer: click the floor to walk, arrow keys or WASD to move, click a picture to stand in front of it.
+// Phone: tap the floor or a picture.
+// Your photos: put them next to this file (e.g. ./photos/01.jpg) and list them in CONFIG.photos.
+// With no photos, eight artworks drawn in code hang on the walls.
+import { createXRApp, THREE, glassPanel, woodTexture, label, chime, mulberry } from 'connect-xr';
+
+const CONFIG = {
+  title: 'Gallery',
+  photos: [],          // e.g. [{ src: './photos/01.jpg', title: 'Seoul, 6 AM', note: 'Shot on my phone' }] or just './photos/01.jpg'
+  hall: { w: 6.4, length: 15, h: 3.6 },
+};
+
+const app = await createXRApp({ title: CONFIG.title, prefer: 'vr', cameraPos: [0.4, 1.65, 1.4], target: [0, 1.5, -3.2], background: 0x070605 });
+const { scene, camera, controls, renderer } = app;
+const H = CONFIG.hall, rnd = mulberry(5);
+const Z0 = 1.6, Z1 = Z0 - H.length; // the hall runs from z = 1.6 (entrance, behind you) to z = -13.4
+
+// ---------- the hall ----------
+const hall = new THREE.Group(); scene.add(hall);
+const floorMat = new THREE.MeshStandardMaterial({ map: woodTexture({ tone: [58, 36, 22], planks: 6, repeat: [2, 6] }), roughness: 0.16, metalness: 0.05 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(H.w, H.length), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.position.z = (Z0 + Z1) / 2; hall.add(floor);
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c1915, roughness: 0.92 });
+const ceilMat = new THREE.MeshStandardMaterial({ color: 0x0d0b09, roughness: 1 });
+const plane = (w, h, mat, x, y, z, ry = 0, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); hall.add(m); return m; };
+plane(H.length, H.h, wallMat, -H.w / 2, H.h / 2, (Z0 + Z1) / 2, Math.PI / 2);
+plane(H.length, H.h, wallMat, H.w / 2, H.h / 2, (Z0 + Z1) / 2, -Math.PI / 2);
+plane(H.w, H.h, wallMat, 0, H.h / 2, Z1, 0);
+plane(H.w, H.h, wallMat, 0, H.h / 2, Z0, Math.PI);
+plane(H.w, H.length, ceilMat, 0, H.h, (Z0 + Z1) / 2, 0, Math.PI / 2);
+// skirting and a gold reveal line along both walls
+const skirt = new THREE.MeshStandardMaterial({ color: 0x0f0d0b, roughness: 0.5 });
+const goldLine = new THREE.MeshBasicMaterial({ color: 0xd6892a, toneMapped: false });
+for (const s of [-1, 1]) {
+  const k = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, H.length), skirt); k.position.set(s * (H.w / 2 - 0.015), 0.06, (Z0 + Z1) / 2); hall.add(k);
+  const g = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.006, H.length), goldLine); g.position.set(s * (H.w / 2 - 0.003), 0.125, (Z0 + Z1) / 2); hall.add(g);
+}
+// ceiling light strip (emissive, no light cost)
+const strip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, H.length - 1.2), new THREE.MeshBasicMaterial({ color: 0x9c7a52, toneMapped: false }));
+strip.position.set(0, H.h - 0.01, (Z0 + Z1) / 2); hall.add(strip);
+// the name on the end wall
+const title = label('CONNECT AI LAB  ·  GALLERY', { size: 0.17, font: 'ui-sans-serif,-apple-system,Arial', weight: 300 });
+title.position.set(0, 2.5, Z1 + 0.01); hall.add(title);
+const endLine = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.008), goldLine); endLine.position.set(0, 2.33, Z1 + 0.01); hall.add(endLine);
+
+// ---------- lights: few and warm (a headset pays for every light on every pixel) ----------
+scene.add(new THREE.HemisphereLight(0xffe7cc, 0x0a0806, 0.22));
+for (const z of [-1.5, -6.2, -10.9]) { const p = new THREE.PointLight(0xffc68a, 5, 9, 1.8); p.position.set(0, H.h - 0.4, z); scene.add(p); }
+
+// ---------- artworks drawn in code (used when CONFIG.photos is empty) ----------
+const ART = [
+  ['Golden Hour', 'Sun over a calm sea', (g, w, h) => { lin(g, h, ['#0e1a33', '#c76a2a', '#f2b45a']); g.fillStyle = '#ffe3a8'; circle(g, w / 2, h * 0.55, w * 0.16); g.fillStyle = '#0d2236'; g.fillRect(0, h * 0.62, w, h); for (let i = 0; i < 18; i++) { g.fillStyle = `rgba(242,180,90,${0.5 - i * 0.025})`; g.fillRect(w / 2 - (60 - i * 3), h * 0.64 + i * 14, (60 - i * 3) * 2, 3); } }],
+  ['Terracotta Rings', 'Clay, kiln, circles', (g, w, h) => { g.fillStyle = '#efe4d2'; g.fillRect(0, 0, w, h); for (let i = 9; i > 0; i--) { g.fillStyle = i % 2 ? '#b5573a' : '#e7cfb3'; circle(g, w * 0.5, h * 0.48, i * w * 0.045); } g.fillStyle = '#2b1d16'; circle(g, w * 0.5, h * 0.48, w * 0.03); }],
+  ['Dusk Ridge', 'Mountains after the sun', (g, w, h) => { lin(g, h, ['#1b1236', '#6b3a6b', '#e08a5a']); const cols = ['#4a2c55', '#33203f', '#22152b', '#120b17']; cols.forEach((c, k) => { g.fillStyle = c; g.beginPath(); g.moveTo(0, h); for (let x = 0; x <= w; x += 8) g.lineTo(x, h * (0.45 + k * 0.12) - Math.sin(x * 0.012 + k * 2) * 40 - Math.sin(x * 0.031 + k) * 18); g.lineTo(w, h); g.fill(); }); }],
+  ['Blossom', 'Spring, from far away', (g, w, h) => { g.fillStyle = '#f4ede3'; g.fillRect(0, 0, w, h); g.strokeStyle = '#3b2a22'; g.lineWidth = 6; g.beginPath(); g.moveTo(w * 0.1, h); g.bezierCurveTo(w * 0.3, h * 0.6, w * 0.5, h * 0.5, w * 0.9, h * 0.2); g.stroke(); for (let i = 0; i < 90; i++) { const t = rnd(); g.fillStyle = `rgba(${230 + rnd() * 25 | 0},${140 + rnd() * 60 | 0},${170 + rnd() * 40 | 0},0.85)`; circle(g, w * (0.15 + t * 0.75) + (rnd() - 0.5) * 120, h * (0.9 - t * 0.7) + (rnd() - 0.5) * 120, 6 + rnd() * 14); } }],
+  ['Bauhaus Study', 'Red, blue and one gold line', (g, w, h) => { g.fillStyle = '#e9e0cf'; g.fillRect(0, 0, w, h); g.fillStyle = '#b8322a'; circle(g, w * 0.36, h * 0.38, w * 0.2); g.fillStyle = '#1f3c78'; g.fillRect(w * 0.45, h * 0.45, w * 0.38, h * 0.3); g.fillStyle = '#d6892a'; g.fillRect(w * 0.12, h * 0.82, w * 0.76, 10); g.fillStyle = '#141210'; g.beginPath(); g.moveTo(w * 0.2, h * 0.75); g.lineTo(w * 0.42, h * 0.55); g.lineTo(w * 0.42, h * 0.75); g.fill(); }],
+  ['Pine Rain', 'A forest in the rain', (g, w, h) => { lin(g, h, ['#0f2a22', '#1f4a3a', '#0a1a15']); for (let i = 0; i < 26; i++) { const x = rnd() * w, s = 40 + rnd() * 90, y = h * 0.45 + rnd() * h * 0.45; g.fillStyle = `rgba(${20 + rnd() * 40 | 0},${70 + rnd() * 60 | 0},${50 + rnd() * 30 | 0},0.9)`; g.beginPath(); g.moveTo(x, y - s * 2.2); g.lineTo(x - s / 2, y); g.lineTo(x + s / 2, y); g.fill(); } g.strokeStyle = 'rgba(200,230,220,0.18)'; g.lineWidth = 1.2; for (let i = 0; i < 120; i++) { const x = rnd() * w, y = rnd() * h; g.beginPath(); g.moveTo(x, y); g.lineTo(x - 6, y + 30); g.stroke(); } }],
+  ['Night Grid', 'A city that never sleeps', (g, w, h) => { lin(g, h, ['#05080f', '#0b1a2a', '#10283a']); for (let i = 0; i < 14; i++) { const bw = 20 + rnd() * 50, bh = 120 + rnd() * h * 0.5, x = rnd() * w; g.fillStyle = '#081019'; g.fillRect(x, h - bh, bw, bh); for (let y = h - bh + 10; y < h - 8; y += 14) for (let xx = x + 5; xx < x + bw - 5; xx += 10) if (rnd() > 0.55) { g.fillStyle = rnd() > 0.3 ? 'rgba(242,180,90,0.9)' : 'rgba(120,210,220,0.8)'; g.fillRect(xx, y, 4, 6); } } }],
+  ['Tide Lines', 'Waves, slowly', (g, w, h) => { lin(g, h, ['#dfe9ee', '#7fb1c9', '#1d4e6e']); g.lineWidth = 3; for (let k = 0; k < 22; k++) { g.strokeStyle = `rgba(255,255,255,${0.15 + (k % 4) * 0.12})`; g.beginPath(); for (let x = 0; x <= w; x += 6) g.lineTo(x, h * 0.3 + k * 26 + Math.sin(x * 0.02 + k * 0.7) * 10); g.stroke(); } }],
+];
+function lin(g, h, stops) { const gr = g.createLinearGradient(0, 0, 0, h); stops.forEach((c, i) => gr.addColorStop(i / (stops.length - 1), c)); g.fillStyle = gr; g.fillRect(0, 0, 4096, h); }
+function circle(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+
+function artTexture(draw) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 640;
+  draw(c.getContext('2d'), c.width, c.height);
+  // a little paper grain
+  const g = c.getContext('2d'); for (let i = 0; i < 2400; i++) { g.fillStyle = `rgba(${rnd() > 0.5 ? '255,255,255' : '0,0,0'},0.035)`; g.fillRect(rnd() * 512, rnd() * 640, 1.5, 1.5); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return { tex: t, aspect: c.width / c.height };
+}
+
+// a soft warm cone of light painted on the wall above each picture (no real light)
+const washTex = (() => {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d');
+  // an oval that fades to nothing before every edge, brightest near the top where the lamp is
+  g.scale(1, 2);
+  const gr = g.createRadialGradient(64, 40, 2, 64, 62, 60); gr.addColorStop(0, 'rgba(255,205,140,0.42)'); gr.addColorStop(0.6, 'rgba(255,205,140,0.12)'); gr.addColorStop(1, 'rgba(255,205,140,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+})();
+
+// ---------- hang the pictures: 4 on each side ----------
+const items = (CONFIG.photos.length ? CONFIG.photos : ART).slice(0, 12).map((p, i) => (Array.isArray(p) ? { title: p[0], note: p[1], draw: p[2] } : typeof p === 'string' ? { src: p, title: p.split('/').pop().replace(/\.[^.]+$/, ''), note: '' } : p));
+const frames = [];
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a120b, metalness: 0.2, roughness: 0.35 });
+const goldFrame = new THREE.MeshStandardMaterial({ color: 0xd6892a, metalness: 1, roughness: 0.3 });
+const brass = goldFrame;
+const perSide = Math.ceil(items.length / 2), gap = (H.length - 3.2) / perSide;
+items.forEach((it, i) => {
+  const side = i % 2 ? 1 : -1, k = Math.floor(i / 2);
+  const z = Z0 - 2.6 - k * gap - (side > 0 ? gap / 2 : 0);
+  const g = new THREE.Group(); g.position.set(side * (H.w / 2 - 0.02), 1.6, z); g.rotation.y = -side * Math.PI / 2; hall.add(g);
+  const H0 = 1.15;
+  const art = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, emissive: 0xffffff, emissiveIntensity: 0.18 }));
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.05), frameMat);
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 0.052), goldFrame);
+  const setAspect = (a) => { const w = H0 * a; art.scale.set(w, H0, 1); back.scale.set(w + 0.16, H0 + 0.16, 1); lip.scale.set(w + 0.06, H0 + 0.06, 1); };
+  art.position.z = 0.031; back.position.z = 0.0; lip.position.z = 0.002;
+  g.add(back, lip, art);
+  if (it.draw) { const { tex, aspect } = artTexture(it.draw); art.material.map = tex; art.material.emissiveMap = tex; setAspect(aspect); }
+  else {
+    setAspect(0.8);
+    new THREE.TextureLoader().load(it.src, (tex) => { tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; art.material.map = tex; art.material.emissiveMap = tex; art.material.needsUpdate = true; setAspect(tex.image.width / tex.image.height); }, undefined, () => console.warn('photo not found: ' + it.src));
+  }
+  // picture light: brass bar + warm wash
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.6, 12), brass); bar.rotation.z = Math.PI / 2; bar.position.set(0, H0 / 2 + 0.2, 0.12); g.add(bar);
+  const wash = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.2), new THREE.MeshBasicMaterial({ map: washTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  wash.position.set(0, 0.05, 0.012); g.add(wash);
+  // small number plate under it
+  const plate = label(String(i + 1).padStart(2, '0') + '   ' + it.title.toUpperCase(), { size: 0.035, font: 'ui-sans-serif,-apple-system,Arial', weight: 400, color: '#bfb3a0' });
+  plate.position.set(0, -H0 / 2 - 0.2, 0.01); g.add(plate);
+  const freq = [523.25, 587.33, 659.25, 698.46, 783.99, 880, 987.77, 1046.5][i % 8];
+  app.interactive(g, () => showCaption(i, g, freq));
+  frames.push({ g, it });
+});
+
+// benches down the middle
+const leather = new THREE.MeshStandardMaterial({ color: 0x3a2418, roughness: 0.5 });
+for (const z of [-3.6, -9.2]) {
+  const b = new THREE.Group(); b.position.set(0, 0, z); hall.add(b);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 1.6), leather); seat.position.y = 0.44; b.add(seat);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.02, 1.5), new THREE.MeshStandardMaterial({ color: 0x120e0b, roughness: 0.4 })); rail.position.y = 0.385; b.add(rail);
+  for (const [x, zz] of [[-0.19, -0.68], [0.19, -0.68], [-0.19, 0.68], [0.19, 0.68]]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.38, 10), brass); leg.position.set(x, 0.19, zz); b.add(leg); }
+}
+
+// contact shadows under the benches
+const shTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 2, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+for (const z of [-3.6, -9.2]) { const s = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.4), new THREE.MeshBasicMaterial({ map: shTex, transparent: true, depthWrite: false })); s.rotation.x = -Math.PI / 2; s.position.set(0, 0.004, z); hall.add(s); }
+
+// ---------- caption panel ----------
+let current = -1;
+const panel = glassPanel(app, {
+  width: 0.7, height: 0.32,
+  draw(ctx, w, h) {
+    const it = items[current] || { title: 'Welcome', note: 'Point at a picture, or walk down the hall.' };
+    ctx.fillStyle = '#D6892A'; ctx.fillRect(56, 60, 56, 3);
+    ctx.fillStyle = '#EBE2D2'; ctx.font = '400 22px ui-sans-serif, -apple-system, Arial'; ctx.letterSpacing = '6px';
+    ctx.fillText(current >= 0 ? `NO. ${String(current + 1).padStart(2, '0')}  ·  CONNECT AI LAB` : 'CONNECT AI LAB  ·  GALLERY', 56, 108);
+    ctx.letterSpacing = '0px';
+    ctx.font = '400 84px "Didot","Bodoni 72",Georgia,serif'; ctx.fillText(it.title, 56, 220);
+    ctx.fillStyle = 'rgba(235,226,210,0.65)'; ctx.font = '400 28px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText(it.note || '', 56, 290);
+    ctx.fillStyle = 'rgba(242,180,90,0.9)'; ctx.font = '400 22px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText(app.state.mode === 'vr' ? 'Point at the floor and pinch to walk.' : 'Click the floor to walk  ·  WASD / arrow keys', 56, 390);
+  },
+});
+scene.add(panel.group);
+panel.group.position.set(0.9, 1.45, -0.6);
+const panelGoal = panel.group.position.clone();
+
+function showCaption(i, g, freq) {
+  current = i; panel.paint();
+  chime(app.audio, freq, { gain: 0.1, time: 2.4 });
+  // the caption floats beside the picture, turned toward the hall
+  const p = new THREE.Vector3(0.95, -0.1, 0.55).applyMatrix4(g.matrixWorld);
+  panelGoal.set(p.x, 1.35, p.z);
+  if (!renderer.xr.isPresenting) {
+    // computer / phone: walk to stand in front of the picture
+    const front = new THREE.Vector3(0, 0, 2.3).applyMatrix4(g.matrixWorld);
+    const look = new THREE.Vector3(0, 0, 0).applyMatrix4(g.matrixWorld);
+    glide(new THREE.Vector3(front.x, 1.6, front.z), new THREE.Vector3(look.x, 1.55, look.z));
+  }
+}
+
+// ---------- walking ----------
+const marker = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.2, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf2b45a, transparent: true, opacity: 0.9, toneMapped: false }));
+marker.visible = false; scene.add(marker);
+const clampX = (x) => THREE.MathUtils.clamp(x, -H.w / 2 + 0.5, H.w / 2 - 0.5);
+const clampZ = (z) => THREE.MathUtils.clamp(z, Z1 + 0.6, Z0 - 0.3);
+
+// computer: move the camera and the orbit target together, smoothly
+let glideFrom = null, glideTo = null, glideT = 1;
+function glide(toCam, toTarget) {
+  glideFrom = { cam: camera.position.clone(), tgt: controls.target.clone() };
+  glideTo = { cam: toCam, tgt: toTarget }; glideT = 0;
+}
+
+// VR: teleport by offsetting the reference space (the same trick as the three.js teleport example)
+let baseRef = null;
+const offset = new THREE.Vector3();
+const eye = new THREE.Vector3();
+app.onModeChange((m) => { baseRef = m === 'vr' || m === 'ar' ? renderer.xr.getReferenceSpace() : null; offset.set(0, 0, 0); panel.paint(); });
+function teleport(point) {
+  if (!baseRef) return;
+  renderer.xr.getCamera().getWorldPosition(eye);
+  // keep where you stand inside your play space; move the world so your head lands over the point
+  offset.x += point.x - eye.x; offset.z += point.z - eye.z;
+  const t = new XRRigidTransform({ x: -offset.x, y: 0, z: -offset.z, w: 1 }, { x: 0, y: 0, z: 0, w: 1 });
+  renderer.xr.setReferenceSpace(baseRef.getOffsetReferenceSpace(t));
+}
+
+app.interactive(floor, ({ point, source }) => {
+  const p = new THREE.Vector3(clampX(point.x), 0, clampZ(point.z));
+  chime(app.audio, 392, { gain: 0.05, time: 0.8 });
+  if (source === 'xr') { teleport(p); return; }
+  const dir = new THREE.Vector3().subVectors(controls.target, camera.position).setY(0).normalize();
+  glide(new THREE.Vector3(p.x, 1.6, p.z), new THREE.Vector3(p.x + dir.x * 2.5, 1.5, p.z + dir.z * 2.5));
+}, (on, point) => {
+  marker.visible = !!(on && point);
+  if (marker.visible) marker.position.set(clampX(point.x), 0.006, clampZ(point.z));
+});
+
+const keys = new Set();
+addEventListener('keydown', (e) => keys.add(e.key.toLowerCase()));
+addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3();
+
+app.onFrame((dt, t) => {
+  // keyboard walking (computer)
+  if (!renderer.xr.isPresenting && keys.size) {
+    fwd.subVectors(controls.target, camera.position).setY(0).normalize();
+    right.crossVectors(fwd, camera.up).normalize();
+    move.set(0, 0, 0);
+    if (keys.has('w') || keys.has('arrowup')) move.add(fwd);
+    if (keys.has('s') || keys.has('arrowdown')) move.sub(fwd);
+    if (keys.has('d') || keys.has('arrowright')) move.add(right);
+    if (keys.has('a') || keys.has('arrowleft')) move.sub(right);
+    if (move.lengthSq()) {
+      move.normalize().multiplyScalar(dt * 2.2);
+      const nx = clampX(camera.position.x + move.x) - camera.position.x, nz = clampZ(camera.position.z + move.z) - camera.position.z;
+      camera.position.x += nx; camera.position.z += nz; controls.target.x += nx; controls.target.z += nz;
+      glideT = 1;
+    }
+  }
+  if (glideT < 1) {
+    glideT = Math.min(1, glideT + dt / 1.1);
+    const k = glideT * glideT * (3 - 2 * glideT);
+    camera.position.lerpVectors(glideFrom.cam, glideTo.cam, k);
+    controls.target.lerpVectors(glideFrom.tgt, glideTo.tgt, k);
+  }
+  // caption panel drifts to its place and faces you
+  panel.group.position.lerp(panelGoal, Math.min(1, dt * 3));
+  panel.group.position.y = panelGoal.y + Math.sin(t * 0.8) * 0.008;
+  (renderer.xr.isPresenting ? renderer.xr.getCamera() : camera).getWorldPosition(eye);
+  const want = Math.atan2(eye.x - panel.group.position.x, eye.z - panel.group.position.z);
+  panel.group.rotation.y += (want - panel.group.rotation.y) * Math.min(1, dt * 3);
+});
+</script>
+</body>
+</html>

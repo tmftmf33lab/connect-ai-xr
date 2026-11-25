@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XR Room · CONNECT AI XR</title>
+<link rel="icon" href="data:,">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0b0906}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/", "connect-xr": "./vendor/connect-xr.js" } }
+</script>
+</head>
+<body>
+<script type="module">
+// XR Room: a warm wooden room with a floating glass panel. Quest: Enter VR to stand inside it.
+// In AR (Quest 3/3S) the walls disappear and the furniture stands in your real room.
+// Change things in the CONFIG block; everything is drawn in code, no image or model files.
+import { createXRApp, THREE, glassPanel, woodTexture, label, chime, mulberry } from 'connect-xr';
+
+const CONFIG = {
+  title: 'XR Room',
+  room: { w: 6, d: 6, h: 3 },
+  moods: {
+    day:   { sky: ['#9cc7e8', '#f3e1c2'], sun: 2.4, lamp: 0.0, hemi: 0.9, exposure: 1.05 },
+    dusk:  { sky: ['#2a1f3d', '#f08a4b'], sun: 1.3, lamp: 1.6, hemi: 0.35, exposure: 0.95 },
+    night: { sky: ['#05060d', '#1b2340'], sun: 0.0, lamp: 2.6, hemi: 0.18, exposure: 0.95 },
+  },
+  start: 'dusk',
+};
+
+const app = await createXRApp({ title: CONFIG.title, prefer: 'vr', cameraPos: [2.3, 1.75, 2.7], target: [-0.4, 1.15, -0.9], background: 0x0b0906 });
+const { scene } = app;
+const R = CONFIG.room, rnd = mulberry(3);
+const room = new THREE.Group(); scene.add(room);
+const vrOnly = []; // hidden in AR so you see your real room
+
+// ---------- shell ----------
+const floorTex = woodTexture({ tone: [128, 82, 48], planks: 8, repeat: [2, 2] });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.55, metalness: 0.0 }));
+floor.rotation.x = -Math.PI / 2; room.add(floor); vrOnly.push(floor);
+const wallMat = new THREE.MeshStandardMaterial({ color: 0xa8957a, roughness: 0.92 });
+const panelTex = woodTexture({ tone: [92, 58, 34], planks: 10, repeat: [3, 1] });
+const wainMat = new THREE.MeshStandardMaterial({ map: panelTex, roughness: 0.6 });
+function wall(w, x, z, ry, withWindow) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry;
+  if (!withWindow) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, R.h), wallMat); m.position.y = R.h / 2; g.add(m);
+  } else {
+    // wall with a big window cut out: four plane pieces around the opening
+    const ww = 2.6, wh = 1.6, wy = 1.55;
+    const parts = [[w, R.h - (wy + wh / 2), 0, (R.h + wy + wh / 2) / 2], [w, wy - wh / 2, 0, (wy - wh / 2) / 2], [(w - ww) / 2, wh, -(w + ww) / 4, wy], [(w - ww) / 2, wh, (w + ww) / 4, wy]];
+    for (const [pw, ph, px, py] of parts) { const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), wallMat); m.position.set(px, py, 0); g.add(m); }
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a1c12, roughness: 0.5 });
+    for (const [fw, fh, fx, fy] of [[ww + 0.1, 0.06, 0, wy + wh / 2], [ww + 0.1, 0.06, 0, wy - wh / 2], [0.06, wh, -ww / 2, wy], [0.06, wh, ww / 2, wy], [0.04, wh, 0, wy]]) {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, 0.08), frameMat); f.position.set(fx, fy, 0); g.add(f);
+    }
+    g.userData.windowPos = [0, wy];
+  }
+  const wain = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, 0.03), wainMat); wain.position.set(0, 0.45, 0.015); g.add(wain);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, 0.05), new THREE.MeshStandardMaterial({ color: 0x3a2617, roughness: 0.4 })); rail.position.set(0, 0.92, 0.03); g.add(rail);
+  room.add(g); vrOnly.push(g); return g;
+}
+const back = wall(R.w, 0, -R.d / 2, 0, true);
+wall(R.w, 0, R.d / 2, Math.PI, false);
+wall(R.d, -R.w / 2, 0, Math.PI / 2, false);
+wall(R.d, R.w / 2, 0, -Math.PI / 2, false);
+const ceil = new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), new THREE.MeshStandardMaterial({ color: 0x7d6f5c, roughness: 1 }));
+ceil.rotation.x = Math.PI / 2; ceil.position.y = R.h; room.add(ceil); vrOnly.push(ceil);
+
+// sky outside the window: a gradient on a canvas, changed by the mood buttons
+const skyCanvas = document.createElement('canvas'); skyCanvas.width = 64; skyCanvas.height = 256;
+const skyTex = new THREE.CanvasTexture(skyCanvas); skyTex.colorSpace = THREE.SRGBColorSpace;
+const sky = new THREE.Mesh(new THREE.PlaneGeometry(9, 5), new THREE.MeshBasicMaterial({ map: skyTex, toneMapped: false }));
+sky.position.set(0, 1.8, -R.d / 2 - 1.2); room.add(sky); vrOnly.push(sky);
+function paintSky([top, bottom]) {
+  const g = skyCanvas.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, top); gr.addColorStop(1, bottom); g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+  // distant hills
+  g.fillStyle = 'rgba(10,8,12,0.55)'; g.beginPath(); g.moveTo(0, 256);
+  for (let x = 0; x <= 64; x += 4) g.lineTo(x, 200 + Math.sin(x * 0.2) * 8 + Math.sin(x * 0.07) * 10); g.lineTo(64, 256); g.fill();
+  skyTex.needsUpdate = true;
+}
+
+// ---------- furniture ----------
+const leather = new THREE.MeshStandardMaterial({ color: 0x5b3a26, roughness: 0.55 });
+const fabric = new THREE.MeshStandardMaterial({ color: 0x2f3a3a, roughness: 0.95 });
+const brass = new THREE.MeshStandardMaterial({ color: 0xd6892a, metalness: 1, roughness: 0.28 });
+const darkWood = new THREE.MeshStandardMaterial({ map: woodTexture({ tone: [70, 42, 24], planks: 3 }), roughness: 0.45 });
+const box = (w, h, d, mat, x, y, z, parent = room) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent.add(m); return m; };
+
+// sofa facing the window
+const sofa = new THREE.Group(); sofa.position.set(0, 0, 1.4); room.add(sofa);
+box(2.1, 0.42, 0.9, leather, 0, 0.21, 0, sofa); box(2.1, 0.5, 0.2, leather, 0, 0.66, 0.36, sofa);
+box(0.2, 0.62, 0.9, leather, -1.05, 0.31, 0, sofa); box(0.2, 0.62, 0.9, leather, 1.05, 0.31, 0, sofa);
+for (const x of [-0.5, 0.5]) box(0.95, 0.12, 0.7, fabric, x, 0.48, -0.06, sofa);
+
+// rug + coffee table
+const rug = new THREE.Mesh(new THREE.CircleGeometry(1.4, 48), new THREE.MeshStandardMaterial({ color: 0x6b2f22, roughness: 1 }));
+rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.004, 0.2); room.add(rug); vrOnly.push(rug);
+const ring = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.26, 64), new THREE.MeshStandardMaterial({ color: 0xd6892a, roughness: 0.8 }));
+ring.rotation.x = -Math.PI / 2; ring.position.set(0, 0.006, 0.2); room.add(ring); vrOnly.push(ring);
+box(1.2, 0.05, 0.6, darkWood, 0, 0.42, 0.25);
+for (const [x, z] of [[-0.55, 0.0], [0.55, 0.0], [-0.55, 0.5], [0.55, 0.5]]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.4, 10), brass); leg.position.set(x, 0.2, z); room.add(leg); }
+// cup and book on the table
+const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.09, 24), new THREE.MeshStandardMaterial({ color: 0xebe2d2, roughness: 0.3 })); cup.position.set(0.3, 0.49, 0.2); room.add(cup);
+box(0.24, 0.035, 0.17, new THREE.MeshStandardMaterial({ color: 0x1d2b3a, roughness: 0.7 }), -0.25, 0.462, 0.3);
+
+// bookshelf: one instanced mesh for all the books (one draw call)
+const shelf = new THREE.Group(); shelf.position.set(-R.w / 2 + 0.25, 0, -0.6); shelf.rotation.y = Math.PI / 2; room.add(shelf);
+box(1.6, 2.1, 0.03, darkWood, 0, 1.05, -0.17, shelf);
+for (const y of [0.05, 0.55, 1.05, 1.55, 2.05]) box(1.6, 0.04, 0.36, darkWood, 0, y, 0, shelf);
+for (const x of [-0.8, 0.8]) box(0.04, 2.1, 0.36, darkWood, x, 1.05, 0, shelf);
+const books = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.75 }), 96);
+const palette = [0x7a2e22, 0x1d3a4a, 0xd6892a, 0x2f4a33, 0xebe2d2, 0x3a2a4a, 0x8a6a3a];
+const mtx = new THREE.Matrix4(), col = new THREE.Color(); let bi = 0;
+for (const y of [0.07, 0.57, 1.07, 1.57]) {
+  let x = -0.76;
+  while (x < 0.72 && bi < 96) {
+    const w = 0.03 + rnd() * 0.035, h = 0.3 + rnd() * 0.14;
+    mtx.compose(new THREE.Vector3(x + w / 2, y + h / 2, 0.02), new THREE.Quaternion(), new THREE.Vector3(w, h, 0.24));
+    books.setMatrixAt(bi, mtx); books.setColorAt(bi, col.setHex(palette[(rnd() * palette.length) | 0])); bi++;
+    x += w + 0.004;
+  }
+}
+books.count = bi; shelf.add(books);
+
+// floor lamp with the warm light
+const lamp = new THREE.Group(); lamp.position.set(-1.45, 0, 1.25); room.add(lamp);
+const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.55, 10), brass); pole.position.y = 0.78; lamp.add(pole);
+const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.03, 32), brass); base.position.y = 0.015; lamp.add(base);
+const shadeMat = new THREE.MeshStandardMaterial({ color: 0xf2dfc0, emissive: 0xffb064, emissiveIntensity: 0.6, roughness: 0.9, side: THREE.DoubleSide });
+const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.3, 32, 1, true), shadeMat); shade.position.y = 1.6; lamp.add(shade);
+const lampLight = new THREE.PointLight(0xffb36b, 2, 6, 1.6); lampLight.position.y = 1.55; lamp.add(lampLight);
+
+// plant in a pot
+const plant = new THREE.Group(); plant.position.set(2.3, 0, -2.3); room.add(plant);
+const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.4, 24), new THREE.MeshStandardMaterial({ color: 0x2b2420, roughness: 0.6 })); pot.position.y = 0.2; plant.add(pot);
+const leaf = new THREE.MeshStandardMaterial({ color: 0x3f6b3a, roughness: 0.8, side: THREE.DoubleSide });
+for (let i = 0; i < 14; i++) {
+  const l = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), leaf); l.scale.set(0.5, 1.6, 0.12);
+  const a = (i / 14) * Math.PI * 2, r = 0.08 + rnd() * 0.1; l.position.set(Math.cos(a) * r, 0.65 + rnd() * 0.45, Math.sin(a) * r);
+  l.rotation.set(Math.cos(a) * 0.6, a, Math.sin(a) * 0.6); plant.add(l);
+}
+
+// framed art on the right wall (code-made: gold circle on deep blue)
+const artC = document.createElement('canvas'); artC.width = 256; artC.height = 320; const ag = artC.getContext('2d');
+ag.fillStyle = '#16213a'; ag.fillRect(0, 0, 256, 320); ag.fillStyle = '#d6892a'; ag.beginPath(); ag.arc(128, 140, 70, 0, 7); ag.fill();
+ag.fillStyle = '#7a2e22'; ag.fillRect(0, 230, 256, 90); ag.fillStyle = 'rgba(235,226,210,0.8)'; ag.fillRect(40, 250, 176, 2);
+const artTex = new THREE.CanvasTexture(artC); artTex.colorSpace = THREE.SRGBColorSpace;
+const art = new THREE.Group(); art.position.set(R.w / 2 - 0.03, 1.7, 0.4); art.rotation.y = -Math.PI / 2; room.add(art);
+box(0.84, 1.04, 0.04, new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: 0.4 }), 0, 0, 0, art);
+const canvasArt = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.9), new THREE.MeshStandardMaterial({ map: artTex, roughness: 0.8 })); canvasArt.position.z = 0.025; art.add(canvasArt);
+
+// soft contact shadows (a blurred dark disc, cheaper than real shadows on a headset)
+const shC = document.createElement('canvas'); shC.width = shC.height = 128; const sg = shC.getContext('2d');
+const sgr = sg.createRadialGradient(64, 64, 4, 64, 64, 64); sgr.addColorStop(0, 'rgba(0,0,0,0.55)'); sgr.addColorStop(1, 'rgba(0,0,0,0)'); sg.fillStyle = sgr; sg.fillRect(0, 0, 128, 128);
+const shTex = new THREE.CanvasTexture(shC);
+for (const [x, z, sx, sz] of [[0, 1.4, 2.6, 1.3], [0, 0.25, 1.6, 0.9], [-1.45, 1.25, 0.6, 0.6], [2.3, -2.3, 0.7, 0.7]]) {
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(sx, sz), new THREE.MeshBasicMaterial({ map: shTex, transparent: true, depthWrite: false }));
+  s.rotation.x = -Math.PI / 2; s.position.set(x, 0.008, z); room.add(s);
+}
+
+// ---------- lights ----------
+const hemi = new THREE.HemisphereLight(0xfff1dc, 0x2a1a10, 0.5); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffc48a, 1.5); sun.position.set(0.5, 3, -6); scene.add(sun);
+const fill = new THREE.PointLight(0xffd7a8, 0.6, 8, 2); fill.position.set(0, 2.6, 0); scene.add(fill);
+
+// ---------- floating glass panel ----------
+let mood = CONFIG.start, musicOn = false, pad = null;
+const panel = glassPanel(app, {
+  width: 1.1, height: 0.61,
+  buttons: [
+    { id: 'day', label: 'DAY', x: 70, y: 330, w: 190, h: 76 },
+    { id: 'dusk', label: 'DUSK', x: 290, y: 330, w: 190, h: 76 },
+    { id: 'night', label: 'NIGHT', x: 510, y: 330, w: 190, h: 76 },
+    { id: 'music', label: 'MUSIC', x: 760, y: 330, w: 200, h: 76 },
+  ],
+  draw(ctx, w, h) {
+    ctx.fillStyle = 'rgba(214,137,42,1)'; ctx.fillRect(70, 70, 60, 3);
+    ctx.fillStyle = '#EBE2D2'; ctx.font = '400 22px ui-sans-serif, -apple-system, Arial'; ctx.letterSpacing = '6px';
+    ctx.fillText('CONNECT AI LAB  ·  XR ROOM', 70, 120);
+    ctx.font = '400 92px "Didot","Bodoni 72",Georgia,serif'; ctx.letterSpacing = '0px';
+    ctx.fillText(mood[0].toUpperCase() + mood.slice(1), 70, 230);
+    ctx.fillStyle = 'rgba(235,226,210,0.6)'; ctx.font = '400 24px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText('Point and pinch, or click. Change the light of the room.', 70, 285);
+  },
+  onButton(id) {
+    if (id === 'music') { musicOn = !musicOn; toggleMusic(); }
+    else setMood(id);
+    for (const b of panel.buttons) b.active = b.id === mood || (b.id === 'music' && musicOn);
+    chime(app.audio, { day: 784, dusk: 659, night: 523, music: 880 }[id], { gain: 0.08, time: 1.2 });
+  },
+});
+panel.group.position.set(0.7, 1.4, -0.7); panel.group.rotation.y = -0.6; scene.add(panel.group);
+
+function setMood(m) {
+  mood = m; const c = CONFIG.moods[m];
+  paintSky(c.sky); sun.intensity = c.sun; hemi.intensity = c.hemi; lampLight.intensity = c.lamp;
+  shadeMat.emissiveIntensity = 0.2 + c.lamp * 0.4; app.renderer.toneMappingExposure = c.exposure;
+}
+function toggleMusic() {
+  const ctx = app.audio; if (!ctx) return;
+  if (musicOn && !pad) {
+    pad = ctx.createGain(); pad.gain.value = 0; pad.connect(ctx.destination);
+    for (const f of [130.81, 196.0, 246.94, 329.63]) { // a soft C major 7 chord
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07 + Math.random() * 0.05; const lg = ctx.createGain(); lg.gain.value = 1.5;
+      lfo.connect(lg).connect(o.detune); o.connect(pad); o.start(); lfo.start();
+    }
+  }
+  if (pad) pad.gain.setTargetAtTime(musicOn ? 0.05 : 0, ctx.currentTime, 0.8);
+}
+setMood(mood);
+for (const b of panel.buttons) b.active = b.id === mood; panel.paint();
+
+// AR: hide the walls and floor, keep the furniture in your real room
+app.onModeChange((m) => { for (const o of vrOnly) o.visible = m !== 'ar'; });
+// the panel slowly turns to face you (desktop camera or headset)
+const eye = new THREE.Vector3();
+app.onFrame((dt, t) => {
+  panel.group.position.y = 1.4 + Math.sin(t * 0.8) * 0.01;
+  (app.renderer.xr.isPresenting ? app.renderer.xr.getCamera() : app.camera).getWorldPosition(eye);
+  const want = Math.atan2(eye.x - panel.group.position.x, eye.z - panel.group.position.z);
+  panel.group.rotation.y += (want - panel.group.rotation.y) * Math.min(1, dt * 3);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Product Showroom · CONNECT AI XR</title>
+<link rel="icon" href="data:,">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#060504}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/", "connect-xr": "./vendor/connect-xr.js" } }
+</script>
+</head>
+<body>
+<script type="module">
+// Product Showroom: your product on a pedestal under a spotlight. Walk around it in VR, or put it in your room in AR.
+// Put your own product in CONFIG: a .glb model (glb: './product.glb') and / or a picture (image: './product.jpg')
+// next to this file. With neither, a bottle drawn in code stands in. The gold dots are your feature notes.
+import { createXRApp, THREE, glassPanel, label, chime, mulberry } from 'connect-xr';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const CONFIG = {
+  title: 'Product Showroom',
+  product: {
+    name: 'Your Product',
+    tagline: 'Walk around it. Point at a gold dot.',
+    glb: null,        // e.g. './product.glb'  (a model you made or may use; keep it under ~10 MB for the headset)
+    image: null,      // e.g. './product.jpg'  (shown as a framed poster behind the pedestal)
+    height: 0.4,      // how tall the product stands, in metres
+  },
+  // feature notes on gold dots: [x, y, z] in metres around the product centre, plus a short text
+  hotspots: [
+    { at: [0.075, 0.06, 0.075], text: 'Feature one' },
+    { at: [-0.1, -0.06, 0.03], text: 'Feature two' },
+    { at: [0.0, 0.17, 0.042], text: 'Feature three' },
+  ],
+  finishes: [
+    { name: 'Onyx', color: 0x121114, roughness: 0.18, metalness: 0.35 },
+    { name: 'Ivory', color: 0xe8dfcf, roughness: 0.3, metalness: 0.0 },
+    { name: 'Teal', color: 0x174a52, roughness: 0.2, metalness: 0.2 },
+    { name: 'Bordeaux', color: 0x5c1624, roughness: 0.22, metalness: 0.15 },
+  ],
+  lights: {
+    warm: { color: 0xffc989, hemi: 0x3a2412 },
+    cool: { color: 0xcfe0ff, hemi: 0x121a2a },
+  },
+};
+
+const P = new THREE.Vector3(0, 0, -1.2);       // pedestal on the floor; product centre about 1.0 m up
+const TOP = 0.86;                               // pedestal top
+const app = await createXRApp({ title: CONFIG.title, prefer: 'vr', cameraPos: [0.72, 1.36, -0.12], target: [0.14, 1.04, -1.2], background: 0x060504, environment: 0.3 });
+const { scene } = app;
+const rnd = mulberry(5);
+const vrOnly = [];
+
+// ---------- the gallery (hidden in AR) ----------
+const floor = new THREE.Mesh(new THREE.CircleGeometry(9, 72), new THREE.MeshStandardMaterial({ color: 0x060504, roughness: 0.55, metalness: 0.0, envMapIntensity: 0.25 }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor); vrOnly.push(floor);
+// warm pool of light on the floor (a radial gradient, no real reflections needed)
+function radial(stops, size = 256) {
+  const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (const [o, col] of stops) gr.addColorStop(o, col);
+  g.fillStyle = gr; g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const poolMat = new THREE.MeshBasicMaterial({ map: radial([[0, 'rgba(255,190,120,0.5)'], [0.35, 'rgba(214,137,42,0.16)'], [1, 'rgba(0,0,0,0)']]), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+const pool = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), poolMat);
+pool.rotation.x = -Math.PI / 2; pool.position.set(P.x, 0.003, P.z); scene.add(pool); vrOnly.push(pool);
+// a curved dark wall behind, with thin gold lines
+const wall = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 4, 64, 1, true, Math.PI * 0.62, Math.PI * 0.76), new THREE.MeshStandardMaterial({ color: 0x16120e, roughness: 0.85, side: THREE.BackSide }));
+wall.position.set(P.x, 2, P.z + 1.4); scene.add(wall); vrOnly.push(wall);
+const lineMat = new THREE.MeshBasicMaterial({ color: 0xd6892a, toneMapped: false });
+for (const y of [0.6, 2.6]) {
+  const l = new THREE.Mesh(new THREE.TorusGeometry(4.17, 0.004, 4, 96, Math.PI * 0.76), lineMat);
+  l.rotation.x = Math.PI / 2; l.rotation.z = Math.PI * 0.62 - Math.PI / 2; l.position.set(P.x, y, P.z + 1.4);
+  scene.add(l); vrOnly.push(l);
+}
+// faint dust in the light: one Points call
+const dustGeo = new THREE.BufferGeometry(), dp = [];
+for (let i = 0; i < 220; i++) { const a = rnd() * 6.28, r = Math.sqrt(rnd()) * 0.5; dp.push(P.x + Math.cos(a) * r, 1.1 + rnd() * 1.9, P.z + Math.sin(a) * r); }
+dustGeo.setAttribute('position', new THREE.Float32BufferAttribute(dp, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffd9a8, size: 0.006, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }));
+scene.add(dust); vrOnly.push(dust);
+
+// ---------- pedestal (stays in AR) ----------
+const stone = new THREE.MeshStandardMaterial({ color: 0x15130f, roughness: 0.32, metalness: 0.1 });
+const gold = new THREE.MeshStandardMaterial({ color: 0xd6892a, metalness: 1, roughness: 0.22 });
+const pedestal = new THREE.Group(); pedestal.position.copy(P); scene.add(pedestal);
+const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.3, TOP - 0.04, 64), stone); col.position.y = (TOP - 0.04) / 2; pedestal.add(col);
+const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.04, 64), stone); cap.position.y = TOP - 0.02; pedestal.add(cap);
+for (const y of [TOP, 0.06]) { const r = new THREE.Mesh(new THREE.TorusGeometry(y > 0.1 ? 0.31 : 0.3, 0.004, 6, 96), gold); r.rotation.x = Math.PI / 2; r.position.y = y; pedestal.add(r); }
+
+// the turntable: the product and its gold dots turn together
+const turntable = new THREE.Group(); turntable.position.set(P.x, TOP, P.z); scene.add(turntable);
+const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.012, 64), gold); disc.position.y = 0.006; turntable.add(disc);
+const product = new THREE.Group(); product.position.y = 0.012; turntable.add(product);
+
+// ---------- the product ----------
+const finishMat = new THREE.MeshPhysicalMaterial({ color: CONFIG.finishes[0].color, roughness: CONFIG.finishes[0].roughness, metalness: CONFIG.finishes[0].metalness, clearcoat: 1, clearcoatRoughness: 0.08 });
+function defaultProduct(h) {
+  // a sleek bottle from one profile line turned around (LatheGeometry), a gold collar and cap
+  const s = h / 0.4, pts = [];
+  const prof = [[0, 0], [0.085, 0], [0.095, 0.01], [0.1, 0.04], [0.1, 0.22], [0.094, 0.255], [0.07, 0.285], [0.038, 0.3], [0.03, 0.305], [0.03, 0.31], [0, 0.31]];
+  for (const [x, y] of prof) pts.push(new THREE.Vector2(x * s, y * s));
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 72), finishMat); g.add(body);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.036 * s, 0.036 * s, 0.018 * s, 48), gold); collar.position.y = 0.318 * s; g.add(collar);
+  const capM = new THREE.Mesh(new THREE.CylinderGeometry(0.032 * s, 0.04 * s, 0.075 * s, 48), gold); capM.position.y = 0.365 * s; g.add(capM);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.1005 * s, 0.1005 * s, 0.006 * s, 72, 1, true), gold); band.position.y = 0.17 * s; g.add(band);
+  return g;
+}
+async function loadGLB(url, h) {
+  const gltf = await new GLTFLoader().loadAsync(url);
+  const m = gltf.scene, box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+  const k = h / Math.max(size.y, 1e-6); m.scale.setScalar(k);
+  box.setFromObject(m); const c = box.getCenter(new THREE.Vector3());
+  m.position.set(-c.x, -box.min.y, -c.z);
+  return m;
+}
+let usingDefault = true;
+if (CONFIG.product.glb) {
+  try { product.add(await loadGLB(CONFIG.product.glb, CONFIG.product.height)); usingDefault = false; }
+  catch (e) { console.warn('Could not load ' + CONFIG.product.glb + ', showing the default product. ' + e.message); }
+}
+if (usingDefault) product.add(defaultProduct(CONFIG.product.height));
+
+// a framed picture behind the pedestal
+if (CONFIG.product.image) {
+  new THREE.TextureLoader().load(CONFIG.product.image, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const a = tex.image.width / tex.image.height, h = 1.1, w = h * a;
+    const frame = new THREE.Group(); frame.position.set(P.x, 1.55, P.z - 1.3);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.03), gold); frame.add(back);
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })); pic.position.z = 0.017; frame.add(pic);
+    scene.add(frame);
+  }, undefined, () => console.warn('Could not load ' + CONFIG.product.image));
+}
+
+// ---------- gold dots with feature notes ----------
+const H = CONFIG.product.height;
+const dotMat = new THREE.MeshBasicMaterial({ color: 0xf2b45a, toneMapped: false });
+const haloTex = radial([[0, 'rgba(242,180,90,0.9)'], [0.4, 'rgba(242,180,90,0.25)'], [1, 'rgba(0,0,0,0)']], 128);
+let openNote = null;
+const dots = CONFIG.hotspots.map((h, i) => {
+  const g = new THREE.Group(); g.position.set(h.at[0], H / 2 + h.at[1], h.at[2]); product.add(g);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.008, 16, 12), dotMat));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  halo.scale.setScalar(0.05); g.add(halo);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ visible: false }))); // easy to point at
+  const note = label(h.text, { size: 0.035, font: 'ui-sans-serif, -apple-system, Arial', weight: 500 });
+  note.visible = false; scene.add(note);
+  const item = { g, halo, note, text: h.text, phase: i * 1.7 };
+  app.interactive(g, () => {
+    if (openNote && openNote !== item) openNote.note.visible = false;
+    item.note.visible = !item.note.visible; openNote = item.note.visible ? item : null;
+    chime(app.audio, [784, 988, 1175][i % 3], { gain: 0.1, time: 1.4 });
+    panel.paint();
+  }, (on) => { halo.scale.setScalar(on ? 0.075 : 0.05); });
+  return item;
+});
+
+// ---------- light: a spotlight from above and a soft visible cone ----------
+const hemi = new THREE.HemisphereLight(0xfff0dc, CONFIG.lights.warm.hemi, 0.25); scene.add(hemi);
+const spot = new THREE.SpotLight(CONFIG.lights.warm.color, 22, 6, 0.34, 0.75, 1.3);
+spot.position.set(P.x, 3.4, P.z + 0.15); spot.target.position.set(P.x, TOP, P.z); scene.add(spot, spot.target);
+const rim = new THREE.DirectionalLight(0x9fb4ff, 0.22); rim.position.set(-1.5, 2, P.z - 2); scene.add(rim);
+const fillL = new THREE.PointLight(0xffd2a0, 0.6, 3, 2); fillL.position.set(0.8, 1.3, P.z + 0.6); scene.add(fillL);
+// the light cone: a vertical gradient on an open cone, added on top
+const coneC = document.createElement('canvas'); coneC.width = 4; coneC.height = 256; const cg = coneC.getContext('2d');
+const lg = cg.createLinearGradient(0, 0, 0, 256); lg.addColorStop(0, 'rgba(255,214,160,0.0)'); lg.addColorStop(0.25, 'rgba(255,214,160,0.06)'); lg.addColorStop(1, 'rgba(255,214,160,0.0)');
+cg.fillStyle = lg; cg.fillRect(0, 0, 4, 256);
+const coneTex = new THREE.CanvasTexture(coneC);
+const coneMat = new THREE.MeshBasicMaterial({ map: coneTex, color: CONFIG.lights.warm.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.62, 2.55, 48, 1, true), coneMat);
+cone.position.set(P.x, TOP + 1.27, P.z); scene.add(cone); vrOnly.push(cone);
+
+// ---------- glass panel ----------
+let spinning = true, finish = 0, mood = 'warm';
+const panel = glassPanel(app, {
+  width: 0.62, height: 0.36,
+  buttons: [
+    { id: 'rotate', label: 'ROTATE', x: 64, y: 440, w: 270, h: 84, active: true },
+    { id: 'color', label: 'COLOR', x: 360, y: 440, w: 270, h: 84 },
+    { id: 'light', label: 'LIGHT', x: 656, y: 440, w: 270, h: 84 },
+  ],
+  draw(ctx) {
+    ctx.fillStyle = '#D6892A'; ctx.fillRect(64, 70, 60, 3);
+    ctx.fillStyle = '#EBE2D2'; ctx.font = '400 26px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText('CONNECT AI LAB   ·   SHOWROOM', 64, 124);
+    ctx.font = '400 104px "Didot","Bodoni 72",Georgia,serif';
+    ctx.fillText(CONFIG.product.name, 64, 258);
+    ctx.fillStyle = 'rgba(235,226,210,0.62)'; ctx.font = '400 28px ui-sans-serif, -apple-system, Arial';
+    ctx.fillText(openNote ? openNote.text : CONFIG.product.tagline, 64, 322);
+    ctx.fillText(`${usingDefault ? CONFIG.finishes[finish].name + '   ·   ' : ''}${mood === 'warm' ? 'Warm light' : 'Cool light'}`, 64, 378);
+  },
+  onButton(id, b) {
+    if (id === 'rotate') { spinning = !spinning; b.active = spinning; }
+    if (id === 'color') { finish = (finish + 1) % CONFIG.finishes.length; const f = CONFIG.finishes[finish]; finishMat.color.setHex(f.color); finishMat.roughness = f.roughness; finishMat.metalness = f.metalness; }
+    if (id === 'light') { mood = mood === 'warm' ? 'cool' : 'warm'; const L = CONFIG.lights[mood]; spot.color.setHex(L.color); coneMat.color.setHex(L.color); hemi.groundColor.setHex(L.hemi); }
+    chime(app.audio, { rotate: 659.25, color: 783.99, light: 587.33 }[id], { gain: 0.07, time: 1.0 });
+  },
+});
+panel.group.position.set(P.x + 0.62, 1.4, P.z - 0.28); scene.add(panel.group);
+
+// ---------- AR: hide the gallery, keep the pedestal and product ----------
+app.onModeChange((m) => { for (const o of vrOnly) o.visible = m !== 'ar'; });
+
+// ---------- motion ----------
+const eye = new THREE.Vector3(), wp = new THREE.Vector3();
+app.onFrame((dt, t) => {
+  if (spinning) turntable.rotation.y += dt * 0.35;
+  (app.renderer.xr.isPresenting ? app.renderer.xr.getCamera() : app.camera).getWorldPosition(eye);
+  for (const d of dots) {
+    d.halo.material.opacity = 0.7 + Math.sin(t * 2.4 + d.phase) * 0.3;
+    if (d.note.visible) { d.g.getWorldPosition(wp); d.note.position.copy(wp).add(new THREE.Vector3(0, 0.05, 0)); d.note.lookAt(eye); }
+  }
+  dust.rotation.y += dt * 0.02;
+  const want = Math.atan2(eye.x - panel.group.position.x, eye.z - panel.group.position.z);
+  panel.group.rotation.y += (want - panel.group.rotation.y) * Math.min(1, dt * 3);
+});
+</script>
+</body>
+</html>
