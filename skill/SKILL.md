@@ -17,7 +17,7 @@ Talk to the user in their language. A beginner gives you one sentence; you do ev
 2. **Make the project:** `XR new <template> <folder>`. The folder gets `index.html` + `vendor/` (three.js and `connect-xr.js`). Edit only `index.html` (start with the `CONFIG` block) and add the user's files (photos, `.glb`) next to it.
 3. **Build the idea** with the rules below. Keep one HTML file; split into more files only when it passes ~800 lines.
 4. **Check:** `XR check <folder>`. Fix every FIX line, then look at the screenshot it prints (`.xr-check/index.png`): open it and look. Empty, black, overexposed or broken = not done.
-5. **Show it:** `XR serve <folder>`. Tell the user the two addresses it prints: the `http://localhost` one for this computer, the `https://192.168...` one to type into the **Meta Quest Browser**. First time on the headset: "Your connection is not private" -> Advanced -> Proceed (it is their own computer). Same Wi-Fi for both.
+5. **Show it:** `XR serve <folder>`. Tell the user the two addresses it prints: the `http://localhost` one for this computer, the `https://192.168...` one to type into the **Meta Quest Browser**. First time on the headset: "Your connection is not private" -> Advanced -> Proceed to 192.168... (unsafe) (it is their own computer). Type the s of https: plain http shows no Enter button. Same Wi-Fi for both.
 6. Leave the server running for them (run it in the background and tell them how to stop it), or tell them to run the serve line themselves.
 
 Ready to share with others? Deploy the folder to any HTTPS static host (GitHub Pages, Netlify, Vercel, Cloudflare Pages). Only when the user asks; publishing is their call.
@@ -76,7 +76,7 @@ app.onAudio((ctx) => { /* sound is allowed from here on */ });
 - [ ] Every interactive thing reacts to click, controller trigger and pinch; small things have a bigger hit area.
 - [ ] Sound starts only after a click / pinch.
 - [ ] Only local files; the user's photos and models are in the folder.
-- [ ] You told the user the two addresses and the "Advanced -> Proceed" step.
+- [ ] You told the user the two addresses and the "Advanced -> Proceed to 192.168... (unsafe)" step.
 
 ## Rules you must keep
 - Never fetch code or assets from the internet into the app, never add tracking or analytics.

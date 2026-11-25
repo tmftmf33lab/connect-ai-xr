@@ -48,8 +48,8 @@ async function serveAndWait(root, {index, title}) {
     log(`  Meta Quest      ${gold(s.lan[0])}` + dimmed('   type this into the Meta Quest Browser'));
     for (const u of s.lan.slice(1)) log(dimmed(`                  ${u}`));
     log('');
-    log(dimmed('  The first time the headset says "Your connection is not private": Advanced -> Proceed. It is your own computer.'));
-    log(dimmed('  처음 한 번 "연결이 비공개로 설정되어 있지 않습니다" 가 나오면: 고급 -> 계속. 내 컴퓨터라서 괜찮아요.'));
+    log(dimmed('  The first time the headset says "Your connection is not private": Advanced -> Proceed to 192.168... (unsafe). It is your own computer.'));
+    log(dimmed('  처음 한 번 "연결이 비공개로 설정되어 있지 않습니다" 가 나오면: 고급 -> 192.168...(으)로 이동. 내 컴퓨터라서 괜찮아요.'));
     log(dimmed('  The headset and this computer must be on the same Wi-Fi. 헤드셋이랑 컴퓨터가 같은 와이파이에 있어야 해요.'));
   } else if (!flag('local') && !flag('no-https')) {
     log(dimmed('  No https for the headset (openssl not found, or no Wi-Fi address). Use one of these instead:'));

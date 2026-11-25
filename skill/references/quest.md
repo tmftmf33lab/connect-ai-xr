@@ -13,7 +13,7 @@
 ## Open it on the headset
 1. `XR serve <folder>` on the computer (same Wi-Fi as the headset).
 2. Meta Quest Browser -> type the `https://192.168.x.x:8443/` address.
-3. "Your connection is not private" -> Advanced -> Proceed (self-made certificate of this computer).
+3. "Your connection is not private" -> Advanced -> Proceed to 192.168... (unsafe) (self-made certificate of this computer).
 4. Press Enter VR / Enter AR. Allow hand tracking / spatial data if asked.
 
 Not working:
