@@ -15,6 +15,8 @@ npx github:wonseokjung/connect-ai-xr install-skill
 
 Claude Code, Codex, Antigravity, Cursor 채팅창에 이 한 줄 붙여 넣고 설치해 달라고 하세요. 그다음에 이렇게 말해 보시면 돼요. "내 상품 쇼룸으로 쓸 건데, 퀘스트에서 열리는 XR 앱 하나 만들어 줘." Node.js 18 이상만 있으면 돼요. API 키도, 게임 엔진도 필요 없어요.
 
+무료 교재(AI 야학당 XR, 프롬프트 7개): https://www.aicitybuilders.com/yahak/xr/
+
 <p align="center"><img src="docs/demo.gif" width="100%" alt="브라우저에서 돌아가는 orrery, xr-room 앱"></p>
 
 ## 바로 써 보는 앱 다섯 개

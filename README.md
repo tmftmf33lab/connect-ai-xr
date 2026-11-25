@@ -15,6 +15,8 @@ npx github:wonseokjung/connect-ai-xr install-skill
 
 Paste that line into Claude Code, Codex, Antigravity or Cursor and ask it to install. Then say: "Make me an XR app for my Quest, a showroom for my product." Needs [Node.js](https://nodejs.org) 18+. No API key, no game engine.
 
+Free textbook (AI Night School XR, 7 prompts, in Korean): https://www.aicitybuilders.com/yahak/xr/
+
 <p align="center"><img src="docs/demo.gif" width="100%" alt="The orrery and xr-room apps running in a browser"></p>
 
 ## Five apps to start from
