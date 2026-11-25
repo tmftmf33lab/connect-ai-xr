@@ -1,52 +1,51 @@
-<p align="center"><img src="docs/hero.jpg" width="100%" alt="AI 멘토 제이, CONNECT AI LAB 의 connect-ai-xr"></p>
+<p align="center"><img src="docs/banner.jpg" width="100%" alt="XR, CONNECT AI LAB"></p>
 
 <p align="center">
-  <b>CONNECT AI LAB</b> · 모두를 위한 AI 교육 · AI education for everyone<br>
-  <a href="https://www.youtube.com/@CONNECT-AI-LAB">YouTube: CONNECT AI LAB</a> · <a href="https://www.aicitybuilders.com/vibecoding">강의: 비주얼 바이브코딩</a> · <a href="README.md">English</a>
+  <b>CONNECT AI LAB</b> · 모두를 위한 AI 교육<br>
+  <a href="https://www.youtube.com/@CONNECT-AI-LAB">YouTube</a> · <a href="https://www.aicitybuilders.com/vibecoding">강의: 비주얼 바이브코딩</a> · <a href="README.md">English</a>
 </p>
 
 # connect-ai-xr
 
-**XR 직원이에요. 에이전트한테 한 문장만 말하면 메타 퀘스트에서 바로 열리는 XR 앱을 만들어 줘요. 헤드셋이 없어도 컴퓨터랑 폰에서 똑같이 3D로 열려요.**
+**에이전트한테 한 문장만 말하세요. 메타 퀘스트에서 바로 열리는 XR 앱이 나와요. 컴퓨터랑 폰에서도 3D로 열려요.**
 
 ```bash
 npx github:wonseokjung/connect-ai-xr install-skill
 ```
 
-에이전트(Claude Code, Codex, Antigravity, Cursor) 채팅창에 위 한 줄을 붙여 넣고 설치해 달라고 하세요. 그다음 새 채팅에서 이렇게 말해 보시면 돼요. "내 상품 쇼룸으로 쓸 건데, 퀘스트에서 열리는 XR 앱 하나 만들어 줘."
+Claude Code, Codex, Antigravity, Cursor 채팅창에 이 한 줄 붙여 넣고 설치해 달라고 하세요. 그다음에 이렇게 말해 보시면 돼요. "내 상품 쇼룸으로 쓸 건데, 퀘스트에서 열리는 XR 앱 하나 만들어 줘." Node.js 18 이상만 있으면 돼요. API 키도, 게임 엔진도 필요 없어요.
 
-필요한 건 [Node.js](https://nodejs.org) 18 이상이랑 코딩 에이전트뿐이에요. 유료 API 키도, 게임 엔진도 필요 없어요. 웹페이지 하나가 그대로 XR 앱이 되는 거거든요.
+<p align="center"><img src="docs/demo.gif" width="100%" alt="브라우저에서 돌아가는 orrery, xr-room 앱"></p>
 
 ## 바로 써 보는 앱 다섯 개
 
-전부 코드로 그렸어요. 이미지 파일, 3D 모델 파일 하나도 안 들어가 있어요. 아래 화면은 헤드셋 없이 제 컴퓨터에서 그냥 열어 본 모습이에요.
+전부 코드로 그렸어요. 아래는 헤드셋 없이 제 노트북에서 그냥 열어 본 화면이에요.
 
 <table>
 <tr>
-<td width="50%" valign="top"><img src="docs/shots/orrery.jpg" width="100%" alt="Orrery"><br><b>orrery</b> · 행성 모형<br><sub>나무 테이블 위에서 행성이 돌아요. 손가락으로 행성을 집으면 행성마다 다른 소리가 나요.</sub></td>
-<td width="50%" valign="top"><img src="docs/shots/xr-room.jpg" width="100%" alt="XR Room"><br><b>xr-room</b> · 나무 방<br><sub>공중에 떠 있는 유리 패널을 눌러서 낮, 노을, 밤 조명을 바꿔요. AR로 들어가면 벽은 사라지고 가구만 내 방에 남아요.</sub></td>
+<td width="50%" valign="top"><img src="docs/shots/orrery.jpg" width="100%" alt="Orrery"><br><b>orrery</b> · 행성 모형<br><sub>테이블 위에서 행성이 돌아요. 집으면 행성마다 다른 소리가 나요.</sub></td>
+<td width="50%" valign="top"><img src="docs/shots/xr-room.jpg" width="100%" alt="XR Room"><br><b>xr-room</b> · 나무 방<br><sub>유리 패널을 누르면 낮, 노을, 밤으로 바뀌어요.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/shots/product-showroom.jpg" width="100%" alt="Product Showroom"><br><b>product-showroom</b> · 상품 쇼룸<br><sub>사업하시는 분들은 이거부터 해 보세요. 내 상품 3D 모델(.glb)이나 사진을 넣으면 받침대 위에 올라가요. 걸어서 한 바퀴 돌아볼 수 있어요.</sub></td>
-<td width="50%" valign="top"><img src="docs/shots/ar-desk.jpg" width="100%" alt="AR Desk"><br><b>ar-desk</b> · 내 책상 AR<br><sub>퀘스트 3, 3S에서는 진짜 내 책상이 보이고, 그 위에 모니터, 화분, 시계를 손가락으로 집어서 올려요.</sub></td>
+<td width="50%" valign="top"><img src="docs/shots/product-showroom.jpg" width="100%" alt="Product Showroom"><br><b>product-showroom</b> · 상품 쇼룸<br><sub>사업하시는 분들은 이거부터요. 내 상품 .glb나 사진이 받침대 위에 올라가요.</sub></td>
+<td width="50%" valign="top"><img src="docs/shots/ar-desk.jpg" width="100%" alt="AR Desk"><br><b>ar-desk</b> · 내 책상 AR<br><sub>퀘스트 3, 3S에서 진짜 내 책상 위에 모니터, 화분, 시계를 올려요.</sub></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><img src="docs/shots/gallery.jpg" width="100%" alt="Gallery"><br><b>gallery</b> · 갤러리<br><sub>내 사진을 걸어 두고 걸어서 둘러보는 전시장이에요. 바닥을 가리킨 다음 엄지랑 검지를 맞대서 집으면 거기로 순간이동하거든요.</sub></td>
-<td width="50%" valign="top"><b>기기마다 알아서 맞춰 줘요</b><br><sub>퀘스트 3, 3S는 AR(내 방이 보이는 화면)이랑 VR 둘 다 되고, 퀘스트 2는 VR로 열려요. 폰이랑 컴퓨터에서도 터치나 마우스로 똑같이 돌려 볼 수 있어요.</sub></td>
+<td width="50%" valign="top"><img src="docs/shots/gallery.jpg" width="100%" alt="Gallery"><br><b>gallery</b> · 갤러리<br><sub>내 사진 걸어 두고 걸어서 둘러봐요. 바닥을 집으면 거기로 순간이동해요.</sub></td>
+<td width="50%" valign="top"><b>기기마다 알아서 맞춰 줘요</b><br><sub>퀘스트 3, 3S는 AR이랑 VR, 퀘스트 2는 VR, 컴퓨터랑 폰은 3D로 열려요.</sub></td>
 </tr>
 </table>
 
-## 퀘스트에서 여는 법
+## 퀘스트에서 여는 법, 딱 3단계
 
-```bash
-npx github:wonseokjung/connect-ai-xr demo
-```
+1. 퀘스트랑 같은 와이파이에 있는 컴퓨터에서 이거 치세요.
+   ```bash
+   npx github:wonseokjung/connect-ai-xr demo
+   ```
+2. 퀘스트 브라우저에 `https://192.168...` 로 시작하는 주소를 그대로 치세요. s까지 꼭이요. 처음 한 번은 경고가 뜨는데, 고급 누르고 이동 누르시면 돼요. 내 컴퓨터라서 괜찮아요.
+3. Enter VR이나 Enter AR 누르시면 끝이에요. 엄지랑 검지를 맞대면 클릭이에요.
 
-이렇게 치시면 주소가 두 개 나와요. `http://localhost` 로 시작하는 건 내 컴퓨터용이고, `https://192.168...` 로 시작하는 걸 퀘스트 브라우저에 그대로 치시면 돼요. https 의 s 까지 꼭 쳐 주세요. s 가 빠지면 VR 버튼이 안 나오거든요.
-
-컴퓨터랑 퀘스트는 같은 와이파이에 있어야 해요. 집이나 사무실 와이파이가 좋아요. 처음 켤 때 컴퓨터에 방화벽 창이 뜨면 허용을 눌러 주시고요.
-
-처음 한 번은 퀘스트가 "연결이 비공개로 설정되어 있지 않습니다" 라고 하는데요, 고급을 누르고 맨 아래 192.168...(으)로 이동을 누르시면 돼요. 내 컴퓨터라서 괜찮아요. 그다음에 Enter VR 이나 Enter AR 버튼을 누르시면 바로 그 공간으로 들어가요. 컨트롤러를 내려놓으면 내 손이 보이는데요, 엄지랑 검지를 맞대서 집으면 클릭이에요. 컨트롤러 방아쇠 버튼도 똑같이 돼요.
+처음에 컴퓨터에 방화벽 창이 뜨면 허용 눌러 주세요.
 
 ## 에이전트가 이렇게 일해요
 
